@@ -29,24 +29,53 @@
 (function ($) {
 
     function onPostSuccess(data, textStatus, jqXHR) {
-        var $this = this;
-        $this.find('ul.errorlist').remove();
+        var settings = this.data('djangoforms').settings;
+
+        var updateErrorLists = true;
+        if ($.isFunction(settings.success)) {
+            updateErrorLists = !settings.success(data, textStatus, jqXHR);
+        }
+
+        if (updateErrorLists)
+            methods.clearErrors.call(this);
+
+        if ($.isFunction(settings.complete)) {
+            settings.complete();
+        }
     }
 
     function onPostError(jqXHR, textStatus, errorThrown) {
-        var $this = this;
-        var data = $this.data('djangoforms');
+        var settings = this.data('djangoforms').settings;
 
         if (jqXHR.status == 422) {
+            onValidationError.call(this, jqXHR, textStatus, errorThrown);
+        } else {
+            if ($.isFunction(settings.unexpectedAjaxError))
+                settings.unexpectedAjaxError(jqXHR, textStatus, errorThrown);
+        }
+
+        if ($.isFunction(settings.complete))
+            settings.complete(jqXHR, textStatus, errorThrown);
+    }
+
+    function onValidationError(jqXHR, textStatus, errorThrown) {
+        var settings = this.data('djangoforms').settings;
+
+        var updateErrorLists = true;
+        if ($.isFunction(settings.validationError)) {
+            updateErrorLists = !settings.validationError(jqXHR, textStatus, errorThrown);
+        }
+
+        if (updateErrorLists) {
             var responseJSON = $.parseJSON(jqXHR.responseText);
 
-            $this.find('input, textarea').each(function (i, item) {
+            this.find('input, textarea').each(function (i, item) {
                 if (item.name in responseJSON.errors == false)
                     $(item).siblings('ul.errorlist').remove();
             });
 
             for (var key in responseJSON.errors) {
-                var $field = $this.find('[name="' + key + '"]');
+                var $field = this.find('[name="' + key + '"]');
                 var $ul_errorlist = $field.siblings('ul.errorlist');
 
                 if ($ul_errorlist.length == 0) {
@@ -60,7 +89,7 @@
                     $ul_errorlist.append('<li>' + responseJSON.errors[key][i] + '</li>');
                 }
 
-                var as = methods.option.call($this, 'as');
+                var as = methods.option.call(this, 'as');
 
                 if (as == "p")
                     $field.parents('p').before($ul_errorlist);
@@ -69,13 +98,25 @@
                 else
                     $field.before($ul_errorlist);
             }
-        } else {
-            onUnexpectedAjaxError(jqXHR, textStatus, errorThrown);
         }
     }
 
-    function onUnexpectedAjaxError(jqXHR, textStatus, errorThrown) {
-        // TODO
+    function collectData(form) {
+        var formData = new FormData();
+
+        form.find('input:not([type="file"]), textarea').each(function (i, item) {
+            formData.append(item.name, $(item).val());
+        });
+
+        form.find('input[type="file"]').each(function (i, item) {
+            var files = item.files;
+            var filesCount = files.length;
+            for (i = 0; i < filesCount; ++i) {
+                formData.append(item.name, files[i]);
+            }
+        });
+
+        return formData;
     }
 
     var methods = {
@@ -84,7 +125,11 @@
                 as:'table', // Django's default
                 errorFieldClass:'',
                 errorParentClass:'',
-                exclude:[]
+                exclude:[],
+                success:false,
+                validationError:false,
+                unexpectedAjaxError:false,
+                complete:false
             }, options);
 
             return this.each(function (i, item) {
@@ -119,24 +164,26 @@
             return undefined;
         },
 
+        clearErrors:function () {
+            return this.each(function (i, item) {
+                var $this = $(item);
+                $this.find('ul.errorlist').remove();
+            });
+        },
+
+        resetInputs:function () {
+            return this.each(function (i, item) {
+                item.reset();
+            });
+        },
+
         post:function (url) {
             var $this = this;
 
             if (url === undefined)
                 url = methods.option.call($this, 'url');
 
-            var formData = new FormData();
-            this.find('input:not([type="file"]), textarea').each(function (i, item) {
-                formData.append(item.name, $(item).val());
-            });
-
-            this.find('input[type="file"]').each(function (i, item) {
-                var files = item.files;
-                var filesCount = files.length;
-                for (i = 0; i < filesCount; ++i) {
-                    formData.append(item.name, files[i]);
-                }
-            });
+            var formData = collectData($this);
 
             $.ajax({
                 type:'post',
