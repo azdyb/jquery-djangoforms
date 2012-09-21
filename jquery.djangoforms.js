@@ -101,6 +101,11 @@
         }
     }
 
+    function onPostComplete() {
+        var settings = this.data('djangoforms').settings;
+        settings.postJqHXR = null;
+    }
+
     function collectData(form) {
         var formData = new FormData();
 
@@ -177,15 +182,27 @@
             });
         },
 
+        abortPost:function() {
+            return this.each(function (i, item) {
+                var $this = $(item);
+                var settings = $this.data('djangoforms').settings;
+                if (settings.postJqXHR) {
+                    settings.postJqXHR.abort();
+                }
+                settings.postJqXHR = null;
+            });
+        },
+
         post:function (url) {
             var $this = this;
+            var settings = $this.data('djangoforms').settings;
 
             if (url === undefined)
                 url = methods.option.call($this, 'url');
 
             var formData = collectData($this);
 
-            $.ajax({
+            settings.postJqXHR = $.ajax({
                 type:'post',
                 dataType:'json',
                 url:url,
@@ -194,6 +211,7 @@
                 data:formData,
                 success:onPostSuccess,
                 error:onPostError,
+                complete:onPostComplete,
                 context:$this
             });
         }
