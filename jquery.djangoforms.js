@@ -69,7 +69,7 @@
         if (updateErrorLists) {
             var responseJSON = $.parseJSON(jqXHR.responseText);
 
-            this.find('input, textarea').each(function (i, item) {
+            this.find('input, textarea, select').each(function (i, item) {
                 if (item.name in responseJSON.errors == false)
                     $(item).siblings('ul.errorlist').remove();
             });
@@ -104,7 +104,7 @@
     function collectData(form) {
         var formData = new FormData();
 
-        form.find('input:not([type="file"]), textarea').each(function (i, item) {
+        form.find('input:not([type="file"]), textarea, select').each(function (i, item) {
             formData.append(item.name, $(item).val());
         });
 
